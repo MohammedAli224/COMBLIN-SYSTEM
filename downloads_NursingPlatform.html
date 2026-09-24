@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة التقييم والذكاء التشغيلي</title>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"IBM Plex Sans Arabic"', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#005A9C',
+                        primaryHover: '#00477A',
+                        surface: '#FFFFFF',
+                        background: '#F8FAFC',
+                        textDark: '#0F172A',
+                        textMuted: '#64748B',
+                        success: '#10B981',
+                        warning: '#F59E0B',
+                        error: '#EF4444'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'IBM Plex Sans Arabic', sans-serif; background-color: #F8FAFC; color: #0F172A; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #CBD5E1; border-radius: 4px; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- SVGs ---
+        const Icons = {
+            CheckCircle: () => <svg className="w-16 h-16 text-success mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>,
+            Upload: () => <svg className="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>,
+            Hospital: () => <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>,
+            Dashboard: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>,
+            Inbox: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>,
+            AI: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>,
+            Logout: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>,
+            Eye: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>,
+        };
+
+        // --- Mock Data ---
+        const mockComplaints = [
+            { id: '10492', date: '24/09 09:00AM', category: 'الأجهزة والمعدات', dept: 'الطوارئ', summary: 'تعطل جهاز التنفس في الغرفة 3...', hasImage: true },
+            { id: '10493', date: '23/09 11:30PM', category: 'المستلزمات الطبية', dept: 'الجراحة', summary: 'نقص في القفازات المعقمة مقاس...', hasImage: false },
+            { id: '10494', date: '23/09 08:15AM', category: 'جداول العمل والمناوبات', dept: 'الباطنة', summary: 'ضغط كبير في المناوبة الليلية...', hasImage: false },
+            { id: '10495', date: '22/09 02:20PM', category: 'النظافة', dept: 'الأطفال', summary: 'تأخر عمال النظافة في الاستجابة...', hasImage: false },
+            { id: '10496', date: '22/09 10:00AM', category: 'الصيانة', dept: 'الاستقبال', summary: 'عطل في التكييف المركزي...', hasImage: true },
+        ];
+
+        // ==========================================
+        // 1. NURSE INTERFACE
+        // ==========================================
+        const NurseForm = () => {
+            const [status, setStatus] = useState('idle'); // idle, loading, success
+            const [showOptional, setShowOptional] = useState(false);
+            const [descLength, setDescLength] = useState(0);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                setStatus('loading');
+                setTimeout(() => setStatus('success'), 1500); // Simulate API call
+            };
+
+            if (status === 'success') {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4 fade-in">
+                        <div className="bg-surface rounded-xl shadow-sm border border-slate-200 p-8 max-w-md w-full text-center">
+                            <Icons.CheckCircle />
+                            <h2 className="text-2xl font-bold mt-4 mb-2">تم استلام ملاحظتك بنجاح</h2>
+                            <p className="text-textMuted mb-8 text-sm leading-relaxed">شكرًا لمساهمتك. ستراجع الإدارة الملاحظات المرسلة بشكل دوري للمساعدة في تحسين بيئة العمل.</p>
+                            <button onClick={() => setStatus('idle')} className="w-full bg-slate-100 text-textDark hover:bg-slate-200 py-3 rounded-lg font-medium transition-colors">إرسال ملاحظة أخرى</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen flex justify-center p-4 md:p-8">
+                    <div className="bg-surface rounded-xl shadow-sm border border-slate-200 p-6 md:p-8 max-w-lg w-full h-fit fade-in">
+                        <div className="text-center mb-8">
+                            <div className="flex justify-center mb-4"><Icons.Hospital /></div>
+                            <h1 className="text-2xl font-bold text-textDark mb-2">صندوق الملاحظات والاقتراحات</h1>
+                            <p className="text-textMuted text-sm">ساعدنا في تحسين بيئة العمل من خلال مشاركة ملاحظتك أو المشكلة التي تواجهها.</p>
+                            <div className="mt-4 p-3 bg-blue-50 text-primary text-xs rounded-lg border border-blue-100">
+                                يمكنك إرسال الملاحظة بدون تسجيل دخول، وإضافة بياناتك اختيارية.
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">نوع الملاحظة <span className="text-error">*</span></label>
+                                <select required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-white">
+                                    <option value="">اختر تصنيفاً</option>
+                                    <option>الأجهزة والمعدات</option>
+                                    <option>المستلزمات الطبية</option>
+                                    <option>الأدوية</option>
+                                    <option>جداول العمل والمناوبات</option>
+                                    <option>ضغط العمل</option>
+                                    <option>بيئة العمل</option>
+                                    <option>النظافة</option>
+                                    <option>الصيانة</option>
+                                    <option>أخرى</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">القسم <span className="text-textMuted font-normal">(اختياري)</span></label>
+                                <select className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-white">
+                                    <option value="">اختر القسم</option>
+                                    <option>الطوارئ</option>
+                                    <option>العناية المركزة</option>
+                                    <option>الباطنة</option>
+                                    <option>الجراحة</option>
+                                    <option>أخرى</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">تفاصيل الملاحظة <span className="text-error">*</span></label>
+                                <textarea required rows="4" 
+                                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none resize-none"
+                                    placeholder="اكتب المشكلة أو الملاحظة بالتفصيل..."
+                                    onChange={(e) => setDescLength(e.target.value.length)}
+                                    maxLength="1000"></textarea>
+                                <div className="flex justify-between mt-1 text-xs text-textMuted">
+                                    <span>يرجى توضيح المشكلة ومكان حدوثها.</span>
+                                    <span>{descLength}/1000</span>
+                                </div>
+                            </div>
+
+                            <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                <button type="button" onClick={() => setShowOptional(!showOptional)} className="w-full p-3 bg-slate-50 text-sm font-semibold text-right flex justify-between items-center hover:bg-slate-100 transition-colors">
+                                    <span>إضافة بياناتي — اختياري</span>
+                                    <span className="text-lg">{showOptional ? '−' : '+'}</span>
+                                </button>
+                                {showOptional && (
+                                    <div className="p-4 space-y-4 bg-white border-t border-slate-200 fade-in">
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1">الاسم</label>
+                                            <input type="text" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-primary outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1">كود الموظف</label>
+                                            <input type="text" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-primary outline-none" />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">إرفاق صورة <span className="text-textMuted font-normal">(اختياري)</span></label>
+                                <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors cursor-pointer">
+                                    <input type="file" className="hidden" id="file-upload" accept="image/*" />
+                                    <label htmlFor="file-upload" className="cursor-pointer">
+                                        <div className="text-primary mb-2"><Icons.Upload /></div>
+                                        <span className="text-sm font-medium text-primary">التقاط / رفع صورة</span>
+                                        <p className="text-xs text-textMuted mt-2">يمكنك إرفاق صورة إذا كانت تساعد في توضيح المشكلة (JPG, PNG)</p>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <button type="submit" disabled={status === 'loading'} className="w-full bg-primary hover:bg-primaryHover text-white py-3 rounded-lg font-medium transition-colors mt-6 flex justify-center items-center">
+                                {status === 'loading' ? 'جارٍ إرسال الملاحظة...' : 'إرسال الملاحظة'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // 2. ADMIN LOGIN
+        // ==========================================
+        const AdminLogin = ({ onLogin }) => {
+            const [loading, setLoading] = useState(false);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setTimeout(() => onLogin(), 1000);
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 bg-background fade-in">
+                    <div className="bg-surface rounded-xl shadow-sm border border-slate-200 p-8 max-w-sm w-full">
+                        <div className="text-center mb-8">
+                            <div className="flex justify-center mb-4"><Icons.Hospital /></div>
+                            <h2 className="text-2xl font-bold text-textDark">تسجيل دخول الإدارة</h2>
+                        </div>
+                        <form onSubmit={handleLogin} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">البريد الإلكتروني</label>
+                                <input type="email" required defaultValue="admin@hospital.com" className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" dir="ltr" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">كلمة المرور</label>
+                                <input type="password" required defaultValue="password" className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" dir="ltr" />
+                            </div>
+                            <button type="submit" disabled={loading} className="w-full bg-primary hover:bg-primaryHover text-white py-3 rounded-lg font-medium transition-colors mt-4">
+                                {loading ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // 3. ADMIN DASHBOARD
+        // ==========================================
+        const AdminDashboard = ({ onLogout }) => {
+            const [activeTab, setActiveTab] = useState('overview'); // overview, inbox, ai
+            const [isSidebarOpen, setSidebarOpen] = useState(false);
+
+            return (
+                <div className="flex h-screen bg-background overflow-hidden fade-in">
+                    {/* Sidebar */}
+                    <aside className={`fixed inset-y-0 right-0 z-50 w-64 bg-surface border-l border-slate-200 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                        <div className="p-6 flex items-center gap-3 border-b border-slate-100">
+                            <Icons.Hospital />
+                            <span className="font-bold text-lg">منصة الذكاء</span>
+                        </div>
+                        <nav className="p-4 space-y-2">
+                            <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'overview' ? 'bg-blue-50 text-primary font-semibold' : 'text-textMuted hover:bg-slate-50'}`}>
+                                <Icons.Dashboard /> نظرة عامة
+                            </button>
+                            <button onClick={() => setActiveTab('inbox')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'inbox' ? 'bg-blue-50 text-primary font-semibold' : 'text-textMuted hover:bg-slate-50'}`}>
+                                <Icons.Inbox /> صندوق الملاحظات
+                            </button>
+                            <button onClick={() => setActiveTab('ai')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'ai' ? 'bg-blue-50 text-primary font-semibold' : 'text-textMuted hover:bg-slate-50'}`}>
+                                <Icons.AI /> تحليل الذكاء الاصطناعي
+                            </button>
+                        </nav>
+                        <div className="absolute bottom-0 w-full p-4 border-t border-slate-100">
+                            <button onClick={onLogout} className="w-full flex items-center gap-3 px-4 py-3 text-error hover:bg-red-50 rounded-lg transition-colors">
+                                <Icons.Logout /> تسجيل الخروج
+                            </button>
+                        </div>
+                    </aside>
+
+                    {/* Overlay for mobile sidebar */}
+                    {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)}></div>}
+
+                    {/* Main Content */}
+                    <main className="flex-1 flex flex-col h-screen overflow-hidden">
+                        {/* Top Header */}
+                        <header className="bg-surface border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+                            <div className="flex items-center gap-4">
+                                <button className="lg:hidden text-textDark" onClick={() => setSidebarOpen(true)}>
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                                </button>
+                                <h1 className="text-xl font-bold text-textDark">
+                                    {activeTab === 'overview' && 'لوحة المتابعة'}
+                                    {activeTab === 'inbox' && 'صندوق الملاحظات'}
+                                    {activeTab === 'ai' && 'تحليل الذكاء الاصطناعي'}
+                                </h1>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="text-right hidden sm:block">
+                                    <p className="text-sm font-semibold text-textDark">مدير النظام</p>
+                                    <p className="text-xs text-textMuted">المستشفى العام</p>
+                                </div>
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-primary font-bold">م</div>
+                            </div>
+                        </header>
+
+                        {/* Content Area */}
+                        <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar bg-background">
+                            {activeTab === 'overview' && <OverviewTab />}
+                            {activeTab === 'inbox' && <InboxTab />}
+                            {activeTab === 'ai' && <AITab />}
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        // --- Tabs ---
+        const OverviewTab = () => {
+            const chartRef = useRef(null);
+
+            useEffect(() => {
+                if(chartRef.current) {
+                    const ctx = chartRef.current.getContext('2d');
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'],
+                            datasets: [{
+                                label: 'عدد الملاحظات',
+                                data: [12, 19, 15, 25, 22, 30, 28],
+                                borderColor: '#005A9C',
+                                backgroundColor: 'rgba(0, 90, 156, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+                }
+            }, []);
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <div className="flex justify-between items-center">
+                        <select className="bg-surface border border-slate-300 text-sm rounded-lg px-4 py-2 outline-none">
+                            <option>آخر 7 أيام</option>
+                            <option>هذا الشهر</option>
+                        </select>
+                    </div>
+
+                    {/* KPIs */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[
+                            { title: 'إجمالي الملاحظات', value: '142', sub: 'هذا الشهر' },
+                            { title: 'هذا الأسبوع', value: '34', sub: '↑ 12% عن الأسبوع الماضي' },
+                            { title: 'أكثر قسم', value: 'الطوارئ', sub: '28 ملاحظة' },
+                            { title: 'أكثر تصنيف', value: 'الأجهزة والمعدات', sub: '35 ملاحظة' },
+                        ].map((kpi, i) => (
+                            <div key={i} className="bg-surface p-5 rounded-xl border border-slate-200 shadow-sm">
+                                <h3 className="text-textMuted text-sm font-medium mb-1">{kpi.title}</h3>
+                                <p className="text-2xl font-bold text-textDark mb-1">{kpi.value}</p>
+                                <p className="text-xs text-textMuted">{kpi.sub}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Charts */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-surface p-5 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
+                            <h3 className="font-bold text-textDark mb-4">عدد الملاحظات بمرور الوقت</h3>
+                            <div className="h-64 relative"><canvas ref={chartRef}></canvas></div>
+                        </div>
+                        <div className="bg-surface p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-textDark mb-4">الملاحظات حسب التصنيف</h3>
+                            <div className="space-y-4 mt-6">
+                                {[{n: 'الأجهزة', p: 35}, {n: 'المستلزمات', p: 25}, {n: 'جداول العمل', p: 20}, {n: 'النظافة', p: 15}].map((c, i) => (
+                                    <div key={i}>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span>{c.n}</span>
+                                            <span className="font-bold">{c.p}%</span>
+                                        </div>
+                                        <div className="w-full bg-slate-100 rounded-full h-2">
+                                            <div className="bg-primary h-2 rounded-full" style={{width: `${c.p}%`}}></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const InboxTab = () => {
+            const [selectedId, setSelectedId] = useState(null);
+
+            if (selectedId) {
+                const item = mockComplaints.find(c => c.id === selectedId);
+                return (
+                    <div className="fade-in max-w-3xl mx-auto">
+                        <button onClick={() => setSelectedId(null)} className="text-textMuted hover:text-textDark mb-4 flex items-center gap-2 text-sm">
+                            <span>&rarr;</span> العودة للقائمة
+                        </button>
+                        <div className="bg-surface border border-slate-200 rounded-xl shadow-sm p-6 md:p-8">
+                            <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-4">
+                                <div>
+                                    <h2 className="text-xl font-bold mb-2">رقم الملاحظة: #{item.id}</h2>
+                                    <p className="text-sm text-textMuted">{item.date}</p>
+                                </div>
+                                <span className="bg-blue-50 text-primary px-3 py-1 rounded-full text-sm font-semibold">{item.category}</span>
+                            </div>
+                            
+                            <div className="space-y-6">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-textMuted mb-1">القسم</h3>
+                                    <p className="font-medium">{item.dept}</p>
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-textMuted mb-2">تفاصيل الملاحظة</h3>
+                                    <p className="leading-relaxed bg-slate-50 p-4 rounded-lg border border-slate-100">{item.summary} تم إرسال هذه الملاحظة للتوضيح الإضافي. التفاصيل هنا تظهر بالكامل للقراءة فقط.</p>
+                                </div>
+                                {item.hasImage && (
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-textMuted mb-2">المرفقات</h3>
+                                        <div className="w-32 h-32 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 border border-slate-300">
+                                            [ صورة ]
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="border-t border-slate-100 pt-4 mt-6">
+                                    <h3 className="text-sm font-semibold text-textMuted mb-2">بيانات المرسل</h3>
+                                    <p className="text-sm">الاسم: <span className="text-textMuted">غير مدرج</span> | كود الموظف: <span className="text-textMuted">غير مدرج</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="bg-surface border border-slate-200 rounded-xl shadow-sm fade-in overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 justify-between">
+                        <input type="text" placeholder="البحث في الملاحظات..." className="px-4 py-2 border border-slate-300 rounded-lg text-sm w-full sm:w-64 outline-none focus:border-primary" />
+                        <select className="px-4 py-2 border border-slate-300 rounded-lg text-sm outline-none bg-white">
+                            <option>جميع التصنيفات</option>
+                            <option>الأجهزة والمعدات</option>
+                            <option>النظافة</option>
+                        </select>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-right text-sm">
+                            <thead className="bg-slate-50 border-b border-slate-200 text-textMuted font-semibold">
+                                <tr>
+                                    <th className="p-4">التاريخ والوقت</th>
+                                    <th className="p-4">التصنيف</th>
+                                    <th className="p-4">القسم</th>
+                                    <th className="p-4">ملخص الملاحظة</th>
+                                    <th className="p-4 text-center">عرض</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {mockComplaints.map(c => (
+                                    <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                                        <td className="p-4 text-textMuted whitespace-nowrap">{c.date}</td>
+                                        <td className="p-4"><span className="bg-blue-50 text-primary px-2 py-1 rounded text-xs font-medium">{c.category}</span></td>
+                                        <td className="p-4">{c.dept}</td>
+                                        <td className="p-4 truncate max-w-xs">{c.summary}</td>
+                                        <td className="p-4 text-center">
+                                            <button onClick={() => setSelectedId(c.id)} className="text-primary hover:text-primaryHover bg-blue-50 p-2 rounded-lg transition-colors">
+                                                <Icons.Eye />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="p-4 border-t border-slate-200 text-sm text-textMuted flex justify-between items-center">
+                        <span>عرض 1-5 من 142</span>
+                        <div className="flex gap-2">
+                            <button className="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50" disabled>السابق</button>
+                            <button className="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50">التالي</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AITab = () => {
+            const [analyzing, setAnalyzing] = useState(false);
+            const [resultReady, setResultReady] = useState(false);
+
+            const startAnalysis = () => {
+                setAnalyzing(true);
+                setTimeout(() => {
+                    setAnalyzing(false);
+                    setResultReady(true);
+                }, 2000);
+            };
+
+            if (!resultReady && !analyzing) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-96 bg-surface border border-slate-200 rounded-xl fade-in text-center p-6">
+                        <Icons.AI />
+                        <h2 className="text-xl font-bold mt-4 mb-2">تحليل الملاحظات بالذكاء الاصطناعي</h2>
+                        <p className="text-textMuted text-sm mb-6 max-w-md">استخراج الأنماط والمشكلات المتكررة لمساعدتك على اتخاذ قرارات تشغيلية مدعمة بالبيانات.</p>
+                        <select className="mb-4 border border-slate-300 rounded-lg px-4 py-2 text-sm outline-none bg-white">
+                            <option>تحليل آخر 7 أيام</option>
+                            <option>تحليل الشهر الحالي</option>
+                        </select>
+                        <button onClick={startAnalysis} className="bg-primary hover:bg-primaryHover text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                            بدء التحليل ⚡
+                        </button>
+                    </div>
+                );
+            }
+
+            if (analyzing) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-96 bg-surface border border-slate-200 rounded-xl fade-in text-center">
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-primary rounded-full animate-spin mb-4"></div>
+                        <h2 className="font-bold text-lg">جارٍ تحليل الملاحظات...</h2>
+                        <p className="text-textMuted text-sm">يقوم النظام بدراسة البيانات واستخراج الأنماط</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="space-y-6 fade-in max-w-5xl mx-auto">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-bold">تقرير تحليل آخر 7 أيام</h2>
+                        <button className="flex items-center gap-2 bg-white border border-slate-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50">
+                            تصدير التقرير
+                        </button>
+                    </div>
+
+                    <div className="bg-surface border border-slate-200 rounded-xl p-6 md:p-8 shadow-sm">
+                        <h3 className="text-lg font-bold text-textDark mb-4 flex items-center gap-2">
+                            <span className="w-2 h-6 bg-primary rounded-sm inline-block"></span>
+                            الملخص التنفيذي
+                        </h3>
+                        <ul className="space-y-3 text-sm leading-relaxed text-textDark mb-8">
+                            <li className="flex items-start gap-2">
+                                <span className="text-primary mt-1">•</span> 
+                                ارتفاع ملحوظ في الملاحظات المتعلقة بالمستلزمات الطبية (قفازات ومعقمات).
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-primary mt-1">•</span> 
+                                تكررت ملاحظات تأخر توفير بعض المستلزمات في أكثر من قسم، خاصة الطوارئ.
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-primary mt-1">•</span> 
+                                قسم الطوارئ سجل عددًا أعلى من المعتاد من الملاحظات هذا الأسبوع (+25%).
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-primary mt-1">•</span> 
+                                معظم الملاحظات المتعلقة بالأجهزة ترتبط بأعطال متكررة لجهاز التنفس بالغرفة 3.
+                            </li>
+                        </ul>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                            {/* Recurring Problems */}
+                            <div>
+                                <h3 className="text-md font-bold text-textDark mb-4 border-b border-slate-100 pb-2">المشكلات الأكثر تكرارًا</h3>
+                                <div className="space-y-4">
+                                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                                        <h4 className="font-bold text-sm text-error">تأخر توفير مستلزمات الطوارئ</h4>
+                                        <p className="text-xs text-textMuted mt-1">15 ملاحظة (20%)</p>
+                                        <p className="text-xs mt-2 font-medium">الأقسام المتأثرة: الطوارئ، العناية المركزة</p>
+                                    </div>
+                                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                                        <h4 className="font-bold text-sm text-warning">أعطال أجهزة المراقبة الحيوية</h4>
+                                        <p className="text-xs text-textMuted mt-1">8 ملاحظات (11%)</p>
+                                        <p className="text-xs mt-2 font-medium">الأقسام المتأثرة: العناية المركزة</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Department Signals */}
+                            <div>
+                                <h3 className="text-md font-bold text-textDark mb-4 border-b border-slate-100 pb-2">مؤشرات الأقسام</h3>
+                                <div className="space-y-4">
+                                    <div className="bg-white p-4 rounded-lg border border-slate-200">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h4 className="font-bold text-sm">الطوارئ</h4>
+                                            <span className="text-xs font-bold text-error bg-red-50 px-2 py-1 rounded">ارتفاع ملحوظ</span>
+                                        </div>
+                                        <p className="text-xs text-textMuted">ارتفاع في عدد الملاحظات بنسبة 25% مقارنة بالفترة السابقة.</p>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-lg border border-slate-200">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h4 className="font-bold text-sm">الجراحة</h4>
+                                            <span className="text-xs font-bold text-success bg-green-50 px-2 py-1 rounded">مستقر</span>
+                                        </div>
+                                        <p className="text-xs text-textMuted">معدل ملاحظات مستقر وضمن النطاق المعتاد.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // MAIN APP ROUTER
+        // ==========================================
+        const App = () => {
+            // View state: 'select_portal', 'nurse', 'admin_login', 'admin_dashboard'
+            const [view, setView] = useState('select_portal');
+
+            if (view === 'select_portal') {
+                return (
+                    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 fade-in">
+                        <div className="text-center mb-8">
+                            <Icons.Hospital />
+                            <h1 className="text-2xl font-bold text-textDark mt-4">منصة التقييم والذكاء التشغيلي</h1>
+                            <p className="text-textMuted text-sm mt-2">اختر واجهة العرض للمعاينة</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl w-full">
+                            <button onClick={() => setView('nurse')} className="bg-surface border border-slate-200 hover:border-primary p-6 rounded-xl shadow-sm text-center transition-all hover:shadow-md">
+                                <h2 className="text-lg font-bold text-primary mb-2">واجهة التمريض (تقديم ملاحظة)</h2>
+                                <p className="text-xs text-textMuted">نموذج الإرسال السريع المتوافق مع الهواتف الذكية بدون تسجيل دخول.</p>
+                            </button>
+                            <button onClick={() => setView('admin_login')} className="bg-surface border border-slate-200 hover:border-primary p-6 rounded-xl shadow-sm text-center transition-all hover:shadow-md">
+                                <h2 className="text-lg font-bold text-textDark mb-2">واجهة الإدارة (لوحة التحكم)</h2>
+                                <p className="text-xs text-textMuted">شاشة العرض والمتابعة وتحليل الذكاء الاصطناعي للإدارة.</p>
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'nurse') return (
+                <div className="relative">
+                    <button onClick={() => setView('select_portal')} className="absolute top-4 right-4 z-50 text-sm bg-slate-200 px-3 py-1 rounded hover:bg-slate-300">العودة للرئيسية</button>
+                    <NurseApp />
+                </div>
+            );
+            if (view === 'admin_login') return (
+                <div className="relative">
+                    <button onClick={() => setView('select_portal')} className="absolute top-4 right-4 z-50 text-sm bg-slate-200 px-3 py-1 rounded hover:bg-slate-300">العودة للرئيسية</button>
+                    <AdminLogin onLogin={() => setView('admin_dashboard')} />
+                </div>
+            );
+            if (view === 'admin_dashboard') return <AdminDashboard onLogout={() => setView('select_portal')} />;
+        };
+
+        const NurseApp = () => <NurseForm />;
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
