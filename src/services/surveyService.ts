@@ -23,8 +23,23 @@ export async function getAdminSurveys() {
   return (data ?? []).map((survey) => ({ ...survey, response_count: survey.survey_responses?.[0]?.count ?? 0 })) as Survey[];
 }
 
+function generateShortSlug() {
+  return crypto.randomUUID().split("-")[0];
+}
+
+export async function getPublishedSurveys() {
+  const { data, error } = await supabase.from("surveys").select("*, survey_questions(*, survey_options(*))").eq("status", "published").order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as Survey[]).map((survey) => {
+    survey.survey_questions?.sort((a, b) => a.position - b.position);
+    survey.survey_questions?.forEach((question) => question.survey_options?.sort((a, b) => a.position - b.position));
+    return survey;
+  });
+}
+
 export async function createSurvey(draft: SurveyDraft, userId: string) {
-  const { data: survey, error } = await supabase.from("surveys").insert({ title_ar: draft.title_ar.trim(), title_en: draft.title_en.trim(), description_ar: draft.description_ar.trim() || null, description_en: draft.description_en.trim() || null, slug: draft.slug.trim().toLowerCase(), response_policy: draft.response_policy, created_by: userId }).select().single();
+  const slug = draft.slug.trim().toLowerCase() || generateShortSlug();
+  const { data: survey, error } = await supabase.from("surveys").insert({ title_ar: draft.title_ar.trim(), title_en: draft.title_en.trim(), description_ar: draft.description_ar.trim() || null, description_en: draft.description_en.trim() || null, slug, response_policy: draft.response_policy, created_by: userId }).select().single();
   if (error) throw error;
   try {
     for (const [position, question] of draft.questions.entries()) {
