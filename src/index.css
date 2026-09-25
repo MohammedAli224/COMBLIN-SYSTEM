@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 190 29% 97%;
+    --foreground: 201 43% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 201 43% 15%;
+    --primary: 191 77% 25%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 188 42% 92%;
+    --secondary-foreground: 192 64% 22%;
+    --muted: 195 23% 94%;
+    --muted-foreground: 199 17% 42%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 194 24% 86%;
+    --input: 194 24% 82%;
+    --ring: 191 77% 25%;
+    --radius: 0.875rem;
+  }
+  * { @apply border-border; }
+  body { @apply min-h-screen bg-background text-foreground antialiased; font-family: "IBM Plex Sans Arabic", sans-serif; }
+  button, input, textarea, select { font: inherit; }
+}
+
+@layer utilities {
+  .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+}
