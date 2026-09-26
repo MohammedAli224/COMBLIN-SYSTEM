@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, ClipboardList, Send } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import { GoBackButton } from "@/components/GoBackButton";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getPublishedSurvey, submitSurveyResponse } from "@/services/surveyService";
+import { markSurveyCompleted } from "@/lib/completedSurveys";
+import { errorMessage } from "@/lib/utils";
 import type { Survey, SurveyAnswerPayload, SurveyQuestion } from "@/types/models";
 
 type AnswerValue = string | string[] | number | boolean;
@@ -22,6 +25,10 @@ export default function SurveyPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  // Distinguishes "we just accepted your answers" from "these answers were
+  // refused because this employee code already answered". Both end the session,
+  // but only one of them means the work was recorded.
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [error, setError] = useState("");
   const isArabic = i18n.language === "ar";
 
@@ -47,24 +54,42 @@ export default function SurveyPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault(); setError("");
     if (!survey) return;
-    if (survey.response_policy === "one_per_employee" && !employeeCode.trim()) { setError(t("survey.employeeCodeRequired")); return; }
+    const requiresEmployeeCode = survey.response_policy === "one_per_employee";
+    if (requiresEmployeeCode && !employeeCode.trim()) { setError(t("survey.employeeCodeRequired")); return; }
     if (survey.survey_questions?.some((question) => question.is_required && !hasAnswer(question))) { setError(t("survey.requiredQuestion")); return; }
     setSubmitting(true);
     try {
       const payload = (survey.survey_questions ?? []).map(toPayload).filter((answer): answer is SurveyAnswerPayload => answer !== null);
-      await submitSurveyResponse(survey.id, employeeCode, payload);
+      // Open surveys never send an employee identifier.
+      await submitSurveyResponse(survey.id, requiresEmployeeCode ? employeeCode : null, payload);
+      // Only after the server accepted it, and only for restricted surveys. This
+      // hides the card; the database is what prevents a second answer.
+      if (requiresEmployeeCode) markSurveyCompleted(survey.id);
       setSubmitted(true);
     } catch (submissionError) {
-      const message = submissionError instanceof Error ? submissionError.message : "";
-      setError(message.includes("duplicate_response") ? t("survey.duplicate") : t("common.error"));
+      // Log the raw PostgREST error. Without this every database failure
+      // collapses into the same generic message, which hides the real cause.
+      console.error("submit_survey_response failed:", submissionError);
+      const message = errorMessage(submissionError);
+      if (message.includes("duplicate_employee_code")) {
+        // The restriction worked, so do not leave the nurse filling in a form
+        // that can never be accepted. Record the completion, end the session,
+        // and say plainly that these answers were not recorded.
+        if (requiresEmployeeCode) markSurveyCompleted(survey.id);
+        setAlreadySubmitted(true);
+        setSubmitted(true);
+      } else if (message.includes("survey_not_available")) setError(t("survey.unavailable"));
+      else if (message.includes("employee_code_required")) setError(t("survey.employeeCodeRequired"));
+      else if (message.includes("invalid_employee_code_hash")) setError(t("common.error"));
+      else setError(t("common.error"));
     } finally { setSubmitting(false); }
   };
 
   if (loading) return <><PublicHeader /><main className="grid min-h-[70vh] place-items-center text-muted-foreground">{t("common.loading")}</main></>;
-  if (!survey) return <><PublicHeader /><main className="mx-auto max-w-xl px-4 py-16"><Card><CardContent className="p-10 text-center"><ClipboardList className="mx-auto mb-4 size-10 text-muted-foreground" /><h1 className="text-xl font-bold">{t("survey.unavailable")}</h1>{error && <p className="mt-3 text-sm text-destructive">{error}</p>}</CardContent></Card></main></>;
-  if (submitted) return <><PublicHeader /><main className="mx-auto max-w-xl px-4 py-16"><Card><CardContent className="p-10 text-center"><CheckCircle2 className="mx-auto mb-5 size-14 text-emerald-600" /><h1 className="text-2xl font-bold">{t("survey.submitted")}</h1><p className="mt-2 text-muted-foreground">{t("survey.submittedBody")}</p></CardContent></Card></main></>;
+  if (!survey) return <><PublicHeader /><main className="mx-auto max-w-xl px-4 py-16"><GoBackButton className="mb-4" /><Card><CardContent className="p-10 text-center"><ClipboardList className="mx-auto mb-4 size-10 text-muted-foreground" /><h1 className="text-xl font-bold">{t("survey.unavailable")}</h1>{error && <p className="mt-3 text-sm text-destructive">{error}</p>}</CardContent></Card></main></>;
+  if (submitted) return <><PublicHeader /><main className="mx-auto max-w-xl px-4 py-16"><GoBackButton className="mb-4" /><Card><CardContent className="p-10 text-center">{alreadySubmitted ? <ClipboardList className="mx-auto mb-5 size-14 text-muted-foreground" /> : <CheckCircle2 className="mx-auto mb-5 size-14 text-emerald-600" />}<h1 className="text-2xl font-bold">{t(alreadySubmitted ? "survey.alreadySubmittedTitle" : "survey.submitted")}</h1><p className="mt-2 text-muted-foreground">{t(alreadySubmitted ? "survey.duplicate" : "survey.submittedBody")}</p></CardContent></Card></main></>;
 
-  return <div className="min-h-screen"><PublicHeader /><main className="mx-auto max-w-2xl px-4 py-8 sm:px-6 sm:py-12"><div className="mb-7"><p className="mb-2 text-sm font-semibold text-primary">{t("survey.title")}</p><h1 className="text-3xl font-bold">{isArabic ? survey.title_ar : survey.title_en}</h1>{(isArabic ? survey.description_ar : survey.description_en) && <p className="mt-3 leading-7 text-muted-foreground">{isArabic ? survey.description_ar : survey.description_en}</p>}<p className="mt-3 text-xs font-semibold text-primary">{t(survey.response_policy === "open" ? "survey.openParticipation" : "survey.onePerEmployee")}</p></div><form onSubmit={handleSubmit} className="space-y-5">
+  return <div className="min-h-screen"><PublicHeader /><main className="mx-auto max-w-2xl px-4 py-8 sm:px-6 sm:py-12"><GoBackButton className="mb-5" /><div className="mb-7"><p className="mb-2 text-sm font-semibold text-primary">{t("survey.title")}</p><h1 className="text-3xl font-bold">{isArabic ? survey.title_ar : survey.title_en}</h1>{(isArabic ? survey.description_ar : survey.description_en) && <p className="mt-3 leading-7 text-muted-foreground">{isArabic ? survey.description_ar : survey.description_en}</p>}<p className="mt-3 text-xs font-semibold text-primary">{t(survey.response_policy === "open" ? "survey.openParticipation" : "survey.onePerEmployee")}</p></div><form onSubmit={handleSubmit} className="space-y-5">
     {survey.response_policy === "one_per_employee" && <Card><CardContent className="p-5"><Label htmlFor="surveyEmployeeCode">{t("survey.employeeCode")} <span className="text-destructive">*</span></Label><Input id="surveyEmployeeCode" className="mt-2" value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} dir="ltr" maxLength={80} required /><p className="mt-2 text-xs text-muted-foreground">{t("survey.employeeCodeRequired")}</p></CardContent></Card>}
     {(survey.survey_questions ?? []).map((question, index) => <QuestionField key={question.id} question={question} index={index} value={answers[question.id]} onChange={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))} isArabic={isArabic} />)}
     {error && <p role="alert" className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}

@@ -1,22 +1,56 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { Department } from "@/types/models";
 
-export interface DashboardMetrics { feedbackTotal: number; feedbackThisMonth: number; activeSurveys: number; responsesTotal: number; byDepartment: Record<Department, number>; }
+/** One day in the submission trend. day is a UTC calendar date, YYYY-MM-DD. */
+export interface TrendPoint {
+  day: string;
+  total: number;
+}
 
+/**
+ * Anonymous versus identified submissions.
+ *
+ * incomplete is the count of rows carrying only some of the three identifying
+ * fields. Those predate the all-or-none check constraint, which was added NOT
+ * VALID, so they can still exist and are reported rather than hidden.
+ */
+export interface IdentityBreakdown {
+  identified: number;
+  anonymous: number;
+  incomplete: number;
+}
+
+export interface DashboardMetrics {
+  feedbackTotal: number;
+  feedbackThisMonth: number;
+  activeSurveys: number;
+  responsesTotal: number;
+  byDepartment: Record<Department, number>;
+  /**
+   * Dense daily series, oldest first, including days with no submissions as an
+   * explicit zero. Absent if the database has not run the migration that adds
+   * it, so consumers must treat it as optional.
+   */
+  feedbackByDay?: TrendPoint[];
+  identity?: IdentityBreakdown;
+  /** Length of the trend window, so the label cannot drift from the series. */
+  windowDays?: number;
+}
+
+/**
+ * All dashboard counters come from one admin-guarded RPC.
+ *
+ * This used to be five direct queries from the browser, two of which counted
+ * the feedback table. Direct SELECT is now revoked on feedback and on
+ * survey_responses, so a single RPC replaces them. The month boundary is
+ * computed in UTC inside the function, matching what the browser did, so the
+ * figure does not shift with the server's timezone.
+ *
+ * The RPC also returns the trend and identity breakdown the analytics section
+ * renders, for the same reason: neither is readable from the client.
+ */
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  const monthStart = new Date();
-  monthStart.setUTCDate(1);
-  monthStart.setUTCHours(0, 0, 0, 0);
-  const [feedback, month, surveys, responses, departments] = await Promise.all([
-    supabase.from("feedback").select("id", { count: "exact", head: true }),
-    supabase.from("feedback").select("id", { count: "exact", head: true }).gte("created_at", monthStart.toISOString()),
-    supabase.from("surveys").select("id", { count: "exact", head: true }).eq("status", "published"),
-    supabase.from("survey_responses").select("id", { count: "exact", head: true }),
-    supabase.from("feedback").select("department"),
-  ]);
-  const firstError = [feedback.error, month.error, surveys.error, responses.error, departments.error].find(Boolean);
-  if (firstError) throw firstError;
-  const byDepartment: Record<Department, number> = { critical: 0, floor: 0, ambulatory: 0 };
-  departments.data?.forEach(({ department }) => { if (department && department in byDepartment) byDepartment[department as Department] += 1; });
-  return { feedbackTotal: feedback.count ?? 0, feedbackThisMonth: month.count ?? 0, activeSurveys: surveys.count ?? 0, responsesTotal: responses.count ?? 0, byDepartment };
+  const { data, error } = await supabase.rpc("admin_get_dashboard_metrics");
+  if (error) throw error;
+  return data as DashboardMetrics;
 }
