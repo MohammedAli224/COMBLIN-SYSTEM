@@ -10,10 +10,17 @@ import type { IdentityBreakdown, TrendPoint } from "@/services/dashboardService"
  * project has no chart dependency and adding one for two charts would put a
  * sizeable bundle in front of a page whose data arrives from a single RPC.
  *
- * The trend is drawn in a fixed left to right coordinate space and marked
- * dir="ltr" even inside the RTL layout. A time axis that reverses with the text
- * direction is harder to read, and showing one mirrored chart next to unmirrored
- * ones in the same screen is worse than picking one convention and keeping it.
+ * The trend is drawn in a fixed left to right coordinate space and the chart is
+ * marked dir="ltr" even inside the RTL layout. A time axis that reverses with the
+ * text direction is harder to read, and showing one mirrored chart next to
+ * unmirrored ones on the same screen is worse than picking one convention and
+ * keeping it.
+ *
+ * That attribute sits on the wrapping div rather than on the <svg> itself.
+ * React's SVGAttributes does not declare dir, so passing it to an svg element is
+ * a type error even though the attribute is perfectly valid and does decide how
+ * the axis labels lay out. Direction inherits into the svg subtree from the div
+ * regardless, so the rendered result is the same.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -26,6 +33,19 @@ const PAD = { top: 14, right: 10, bottom: 26, left: 32 };
 const PLOT_W = WIDTH - PAD.left - PAD.right;
 const PLOT_H = HEIGHT - PAD.top - PAD.bottom;
 const BASELINE = PAD.top + PLOT_H;
+
+/**
+ * A point on the trend line: where it sits on screen, plus the day and value it
+ * came from.
+ *
+ * `day` and `total` are carried over from the source point instead of being read
+ * back off `series` by index. The chart only ever reaches a point through the
+ * index it was generated at, so keeping the coordinate and its label on the same
+ * object removes a whole class of bug where a marker and its date come from
+ * different points. It also means the marker guard below can test the value
+ * without indexing `series` a second time.
+ */
+type PlottedPoint = { day: string; total: number; x: number; y: number };
 
 /**
  * Rounds an axis maximum up to a 1, 2 or 5 times a power of ten, so the grid
@@ -58,7 +78,9 @@ export function FeedbackTrendChart({ series, windowDays }: { series: TrendPoint[
 
   const max = niceMax(peak?.total ?? 1);
   const step = series.length > 1 ? PLOT_W / (series.length - 1) : 0;
-  const points = series.map((point, index) => ({
+  const points: PlottedPoint[] = series.map((point: TrendPoint, index: number) => ({
+    day: point.day,
+    total: point.total,
     x: PAD.left + (series.length > 1 ? index * step : PLOT_W / 2),
     y: BASELINE - (point.total / max) * PLOT_H,
   }));
@@ -73,10 +95,21 @@ export function FeedbackTrendChart({ series, windowDays }: { series: TrendPoint[
   // than one at a fractional value.
   const ticks = max % 2 === 0 ? [0, max / 2, max] : [0, max];
 
+  // How many date labels to draw without crowding the axis.
+  const labelCount = Math.min(5, series.length);
+
+  // Spread across the whole window rather than taking the first N days, so a
+  // 30 day view labels both ends instead of clustering everything at the start.
+  // The Set drops the collisions that show up when the series is shorter than
+  // labelCount and the rounding steps land on the same day twice.
+  //
+  // Array.from's map callback takes (value, index) and nothing else, so the
+  // length of the array being built is read from the constant that built it
+  // rather than from a third argument that the overload does not have.
   const labelIndices = Array.from(
-    new Set(
-      Array.from({ length: Math.min(5, series.length) }, (_, index, all) =>
-        Math.round((index * (series.length - 1)) / Math.max(1, all.length - 1)),
+    new Set<number>(
+      Array.from({ length: labelCount }, (_unused: unknown, index: number) =>
+        Math.round((index * (series.length - 1)) / Math.max(1, labelCount - 1)),
       ),
     ),
   );
@@ -89,13 +122,12 @@ export function FeedbackTrendChart({ series, windowDays }: { series: TrendPoint[
   const label = t("admin.trendChartLabel", { days: windowDays, total });
 
   return (
-    <div>
+    <div dir="ltr">
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="h-auto w-full"
         role="img"
         aria-label={label}
-        dir="ltr"
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
@@ -149,18 +181,21 @@ export function FeedbackTrendChart({ series, windowDays }: { series: TrendPoint[
           />
         )}
 
-        {labelIndices.map((index) => (
-          <text
-            key={series[index].day}
-            x={points[index].x}
-            y={HEIGHT - 8}
-            textAnchor="middle"
-            fontSize={10}
-            fill="hsl(var(--muted-foreground))"
-          >
-            {formatDay(series[index].day)}
-          </text>
-        ))}
+        {labelIndices.map((index) => {
+          const point = points[index];
+          return (
+            <text
+              key={point.day}
+              x={point.x}
+              y={HEIGHT - 8}
+              textAnchor="middle"
+              fontSize={10}
+              fill="hsl(var(--muted-foreground))"
+            >
+              {formatDay(point.day)}
+            </text>
+          );
+        })}
       </svg>
     </div>
   );
